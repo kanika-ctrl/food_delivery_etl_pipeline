@@ -6,8 +6,9 @@ from pathlib import Path
 
 # query for overpass to get api for project api getting from link is large string that why calling query like this
 
-API_URL = (
-    "https://overpass-api.de/api/interpreter?data="
+API_URL = "https://overpass-api.de/api/interpreter"
+
+OVERPASS_QUERY = (
     "[out:json][timeout:25];"
     "area[\"name\"=\"Chandigarh\"][admin_level=6]->.searchArea;"
     "("
@@ -18,6 +19,10 @@ API_URL = (
     "out body;"
 )
 
+HEADERS = {
+    "User-Agent": "FoodDeliveryPipeline/1.0 (contact@fooddeliverypipeline.org)",
+    "Accept": "application/json"
+}
 
 RAW_DIR = Path(__file__).parent.parent / "data" / "raw"
 
@@ -33,11 +38,16 @@ def fetch_data():
     # Fetched Data with retries
     for attempt in range(1, max_retries + 1):
         try:
-            response = requests.get(API_URL, timeout=60)
+            response = requests.post(
+                API_URL,
+                data={"data": OVERPASS_QUERY},
+                headers=HEADERS,
+                timeout=60
+            )
             response.raise_for_status()
             api_data = response.json()
             break
-        except requests.RequestException as e:
+        except (requests.RequestException, json.JSONDecodeError, ValueError) as e:
             if attempt == max_retries:
                 # Re-raise after final attempt so the pipeline can fail loudly
                 raise
@@ -52,7 +62,7 @@ def fetch_data():
         "metadata": {
             "source": "overpass_turbo",
             "endpoint": API_URL,
-            "ingestion_timestamp": dt.datetime.utcnow().isoformat()
+            "ingestion_timestamp": dt.datetime.now(dt.timezone.utc).isoformat()
         },
         "data": api_data
     }
@@ -60,7 +70,7 @@ def fetch_data():
     #  saving data to files
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-    filename = f"orders_{dt.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+    filename = f"orders_{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
     file_path = RAW_DIR / filename
 
     with open(file_path, "w", encoding="utf-8") as f:
